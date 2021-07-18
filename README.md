@@ -1,4 +1,4 @@
-# Multi-Task Learning of Generation and Classification for Emotion-Aware Dialogue Response Generation
+# Emotion-Aware Dialogue Response Generation by Multi-Task Learning
 
 Codes for the paper of [Multi-Task Learning of Generation and Classification for Emotion-Aware Dialogue Response Generation](https://aclanthology.org/2021.naacl-srw.15/) at NAACL SRW 2021.
 
@@ -42,10 +42,10 @@ Codes for the paper of [Multi-Task Learning of Generation and Classification for
 
 | Dataset | Task | # Labels | URL |
 | --- | --- | --- | --- |
-| DailyDialog | Response Generation | - | http://yanran.li/dailydialog |
-| Twitter Emotion Corpus | Emotion Recognition | 6 | http://saifmohammad.com/WebPages/SentimentEmotionLabeledData.html |
-| SST-2 | Coarse-Grained Emotion Recognition | 2 | https://gluebenchmark.com/tasks |
-| CrowdFlower | Fine-Grained Emotion Recognition | 12 | https://data.world/crowdflower/sentiment-analysis-in-text |
+| DailyDialog | Response Generation | - | [Yanran's Attic](http://yanran.li/dailydialog) |
+| Twitter Emotion Corpus | Emotion Recognition | 6 | [Saif \| Emotion and Sentiment Data](http://saifmohammad.com/WebPages/SentimentEmotionLabeledData.html) |
+| SST-2 | Coarse-Grained Emotion Recognition | 2 | [GLUE Benchmark](https://gluebenchmark.com/tasks) |
+| CrowdFlower | Fine-Grained Emotion Recognition | 12 | [Sentiment Analysis in Text - dataset by crowdflower \| data.world](https://data.world/crowdflower/sentiment-analysis-in-text) |
 
 The datasets are selected from https://github.com/sarnthil/unify-emotion-datasets.
 
