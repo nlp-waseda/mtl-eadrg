@@ -4,26 +4,13 @@ import random
 
 import numpy as np
 import torch
-import torch.nn.functional as F
-import torch.optim as optim
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from transformers import (
-    AdamW,
-    BartTokenizer,
-    get_linear_schedule_with_warmup
-)
-from transformers.modeling_bart import (
-    shift_tokens_right,
-    BartClassificationHead
-)
+from transformers import AdamW, BartTokenizer, get_linear_schedule_with_warmup
+from transformers.modeling_bart import shift_tokens_right
 
-from dataset import data_dict, MultitaskDataset
-from multitask_bart import (
-    BartForMultitaskLearning,
-    BartForAdversarialMultitaskLearning
-)
-from sampler import MultitaskSampler, TaskCurriculumSampler
+from multitask_bart import BartForMultitaskLearning
+from sampler import MultitaskSampler
 
 
 def set_seed(seed):
@@ -103,20 +90,6 @@ class MultitaskBartFinetuner(pl.LightningModule):
             use_cache=use_cache,
             task=task
         )
-
-    """def _step(self, batch):
-        lm_labels = batch["target_ids"]
-        lm_labels[lm_labels[:, :] == self.tokenizer.pad_token_id] = -100
-
-        outputs = self(
-            input_ids=batch["source_ids"],
-            attention_mask=batch["source_mask"],
-            lm_labels=lm_labels,
-            decoder_attention_mask=batch["target_mask"]
-        )
-        loss = outputs[0]
-        return loss
-    """
 
     def _step(self, batch):
         if batch["task"][0] == "response":
@@ -284,190 +257,6 @@ class MultitaskBartFinetuner(pl.LightningModule):
             batch_sampler=sampler,
             num_workers=4
         )
-
-
-class AdversarialMultitaskBartFinetuner(MultitaskBartFinetuner):
-    def __init__(self, hparams, get_dataset):
-        super().__init__(hparams, get_dataset)
-
-        self.model = BartForAdversarialMultitaskLearning.from_pretrained(
-            hparams.model_name_or_path
-        )
-
-        self.discriminator = BartClassificationHead(
-            self.model.config.d_model,
-            self.model.config.d_model,
-            2,  # cls: 0 and gen: 1
-            self.model.config.classif_dropout
-        )
-        self.model.model._init_weights(self.discriminator.dense)
-        self.model.model._init_weights(self.discriminator.out_proj)
-
-    def _step(self, batch):
-        if batch["task"][0] == "response":
-            pad_token_id = self.tokenizer.pad_token_id
-            target_ids = batch["target_ids"]
-
-            decoder_input_ids = shift_tokens_right(target_ids, pad_token_id)
-
-            outputs = self(
-                input_ids=batch["source_ids"],
-                attention_mask=batch["source_mask"],
-                decoder_input_ids=decoder_input_ids,
-                use_cache=False,
-                task=batch["task"][0]
-            )
-
-            lprobs = torch.nn.functional.log_softmax(outputs[0], dim=-1)
-            loss, nll_loss = label_smoothed_nll_loss(
-                lprobs,
-                target_ids,
-                self.hparams.label_smoothing,
-                ignore_index=pad_token_id
-            )
-
-        elif batch["task"][0] in ["cfemotion", "emotion", "sentiment"]:
-            outputs = self(
-                input_ids=batch["source_ids"],
-                attention_mask=batch["source_mask"],
-                lm_labels=batch["target_label"],
-                task=batch["task"][0]
-            )
-            loss = outputs[0]
-
-        else:
-            raise ValueError("The dataset contains an invalid task.")
-
-        loss = self.loss_weights[self.tasks.index(batch["task"][0])] * loss
-
-        label = int(batch["task"][0] != "response")
-        labels = torch.full((len(batch["task"]),), label, dtype=torch.long).cuda()
-
-        x = outputs[1 + int(batch["task"][0] != "response")]  # last hidden state
-        eos_mask = batch["source_ids"].eq(self.model.config.eos_token_id)
-        if len(torch.unique(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
-        logits = self.discriminator(sentence_representation)
-        loss = F.cross_entropy(logits.view(-1, 2), labels.view(-1)) + loss
-
-        return loss
-
-
-    def _stepD(self, batch):
-        if batch["task"][0] == "response":
-            pad_token_id = self.tokenizer.pad_token_id
-            target_ids = batch["target_ids"]
-            decoder_input_ids = shift_tokens_right(target_ids, pad_token_id)
-            outputs = self(
-                input_ids=batch["source_ids"],
-                attention_mask=batch["source_mask"],
-                decoder_input_ids=decoder_input_ids,
-                use_cache=False,
-                task=batch["task"][0]
-            )
-        elif batch["task"][0] in ["cfemotion", "emotion", "sentiment"]:
-            outputs = self(
-                input_ids=batch["source_ids"],
-                attention_mask=batch["source_mask"],
-                task=batch["task"][0]
-            )
-        else:
-            raise ValueError("The dataset contains an invalid task.")
-
-        label = int(batch["task"][0] == "response")
-        labels = torch.full((len(batch["task"]), 1), label, dtype=torch.long).cuda()
-
-        x = outputs[1]  # last hidden state
-        eos_mask = batch["source_ids"].eq(self.model.config.eos_token_id)
-        if len(torch.unique(eos_mask.sum(1))) > 1:
-            raise ValueError(
-                "All examples must have the same number of <eos> tokens."
-            )
-        sentence_representation = x[eos_mask, :].view(
-            x.size(0),
-            -1,
-            x.size(-1)
-        )[:, -1, :]
-        logits = self.discriminator(sentence_representation)
-        loss = F.cross_entropy(logits.view(-1, 2), labels.view(-1))
-
-        return loss
-
-    def training_step(self, batch, batch_idx, optimizer_idx):
-        if optimizer_idx == 0:  # model
-            loss = self._step(batch)
-            tensorboard_logs = {"train_loss": loss}
-        if optimizer_idx == 1:  # discriminator
-            loss = self._stepD(batch)
-            tensorboard_logs = {"train_lossD": loss}
-        return {"loss": loss, "log": tensorboard_logs}
-
-    def training_epoch_end(self, outputs):
-        avg_train_loss = torch.stack([x["loss"] for x in outputs[0]]).mean()
-        tensorboard_logs = {"avg_train_loss": avg_train_loss}
-        return {
-            "avg_train_loss": avg_train_loss,
-            "log": tensorboard_logs,
-            "progress_bar": tensorboard_logs
-        }
-
-    def configure_optimizers(self):
-        model = self.model
-        no_decay = ["bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [
-                    p for n, p in model.named_parameters()
-                    if not any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": self.hparams.weight_decay
-            },
-            {
-                "params": [
-                    p for n, p in model.named_parameters()
-                    if any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.0
-            }
-        ]
-        optimizer = AdamW(
-            optimizer_grouped_parameters,
-            lr=self.hparams.learning_rate,
-            eps=self.hparams.adam_epsilon
-        )
-        self.opt = optimizer
-
-        # https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html
-        optimizerD = optim.Adam(
-            self.discriminator.parameters(),
-            lr=0.0002,
-            betas=(0.5, 0.999)
-        )
-
-        return [optimizer, optimizerD]
-
-    def optimizer_step(
-        self,
-        epoch,
-        batch_idx,
-        optimizer,
-        optimizer_idx,
-        second_order_closure=None,
-        using_native_amp=None
-    ):
-        if optimizer_idx == 0:  # model
-            if self.trainer.use_tpu:
-                xm.optimizer_step(optimizer)
-            else:
-                optimizer.step()
-            optimizer.zero_grad()
-            self.lr_scheduler.step()
-
-        if optimizer_idx == 1:  # discriminator
-            optimizer.step()
-            optimizer.zero_grad()
-
 
 
 logger = logging.getLogger(__name__)

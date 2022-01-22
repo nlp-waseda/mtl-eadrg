@@ -1,8 +1,13 @@
 import os
+import shutil
 import sys
 
 in_dir = sys.argv[1]
 out_dir = sys.argv[2]
+
+if os.path.isdir(out_dir):
+    shutil.rmtree(out_dir)
+os.mkdir(out_dir)
 
 for split in ['train', 'validation', 'test']:
     path = os.path.join(in_dir, split, 'dialogues_' + split + '.txt')

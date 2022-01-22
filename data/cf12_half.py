@@ -1,9 +1,8 @@
 import csv
 import os
 import random
+import shutil
 import sys
-
-input_path, output_dir = sys.argv[1:]
 
 emotions = [
     'anger',
@@ -20,6 +19,12 @@ emotions = [
     'surprise',
     'worry'
 ]
+
+input_path, output_dir = sys.argv[1:]
+
+if os.path.isdir(output_dir):
+    shutil.rmtree(output_dir)
+os.mkdir(output_dir)
 
 pairs = []
 with open(input_path) as f:

@@ -1,9 +1,12 @@
 import os
+from typing import Dict, List, Optional, Union
 
 import torch
 from torch.utils.data import Dataset
+from transformers import PreTrainedTokenizer
 
-data_dict = {
+
+DATA_DICT = {
     'cfemotion': 'cf12_half',
     'emotion': 'tec',
     'response': 'dd',
@@ -12,7 +15,14 @@ data_dict = {
 
 
 class MultitaskDataset(Dataset):
-    def __init__(self, tasks, tokenizer, data_dir, type_path, max_len=512):
+    def __init__(
+        self,
+        tasks: List[str],
+        tokenizer: PreTrainedTokenizer,
+        data_dir: str,
+        type_path: str,
+        max_len: Optional[int] = 512
+    ) -> None:
         self.max_len = max_len
         self.tokenizer = tokenizer
         self.inputs = []
@@ -23,10 +33,10 @@ class MultitaskDataset(Dataset):
 
         self._build(tasks, data_dir, type_path)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.inputs)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Dict[str, Union[str, torch.Tensor]]:
         task = self.tasks[index]
 
         source_ids = self.inputs[index]['input_ids'].squeeze()
@@ -46,11 +56,11 @@ class MultitaskDataset(Dataset):
             'target_label': target_label
         }
 
-    def _build(self, tasks, data_dir, type_path):
+    def _build(self, tasks: List[str], data_dir: str, type_path: str) -> None:
         for task in tasks:
             input_path = os.path.join(
                 data_dir,
-                data_dict[task],
+                DATA_DICT[task],
                 type_path + '.source'
             )
 
@@ -71,7 +81,7 @@ class MultitaskDataset(Dataset):
 
             target_path = os.path.join(
                 data_dir,
-                data_dict[task],
+                DATA_DICT[task],
                 type_path + '.target'
             )
 

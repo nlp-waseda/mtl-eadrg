@@ -1,9 +1,13 @@
 import os
+import shutil
 import sys
+
+if os.path.isdir(sys.argv[2]):
+    shutil.rmtree(sys.argv[2])
+os.mkdir(sys.argv[2])
 
 in_path = os.path.join(sys.argv[1], '{}.tsv')
 out_path = os.path.join(sys.argv[2], '{}.{}')
-
 
 with open(in_path.format('test')) as f:
     test_size = len(f.readlines())

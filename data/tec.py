@@ -1,11 +1,16 @@
 import os
 import re
+import shutil
 import sys
 
 emotions = ['anger', 'disgust', 'fear', 'joy', 'sadness', 'surprise']
 
 mention = re.compile(r'^@\w+\s+', re.ASCII)
 hashtag = re.compile(r'\s+#\w+$', re.ASCII)
+
+if os.path.isdir(sys.argv[2]):
+    shutil.rmtree(sys.argv[2])
+os.mkdir(sys.argv[2])
 
 in_path = sys.argv[1]
 out_path = os.path.join(sys.argv[2], '{}.{}')

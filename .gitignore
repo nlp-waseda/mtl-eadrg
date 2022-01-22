@@ -1,12 +1,12 @@
 __pycache__/
 
+*.sh
+*.o*
+
 *.source
 *.target
 
-*.sh
-*.sh.o*
-
-output/
+outputs/
 lightning_logs/
 
-eval.csv
+*.csv
